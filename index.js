@@ -5,24 +5,24 @@ import FormData from "form-data";
 import { createReadStream, readFileSync } from "fs";
 
 dotenv.config();
+const createTicketUrl = process.env.URL;
 
 // add agent name, id and group to get tickets from. the name of the group should match .json file
 const agents = [
   {
-    name: 'John Doe',
-    id: 9876,
-    group: 'group_1'
+    name: 'example name',
+    id: 2222,
+    group: 'group_name'
   },
 ];
+// set number of minutes to wait
 const minutes = 15; 
-const ticketsPerAgent = 16; // 16 for 4 hours
 
 const groups = [...new Set(agents.map((agent) => agent.group))];
-const createTicketUrl = process.env.URL;
-let messages;
-let currMsgId = 0;
+const pointers = groups.reduce((acc, group) => ({...acc, [group]: 0}), {});
+let catalogues, maxMessages, currMsgIdx = 0;
 
-const makeFormData = ({ subject, messagePath, agent, files }) => {
+const makeFormData = ({ subject, messagePath, files }, agent) => {
   const formData = new FormData();
   formData.append('api_token', process.env.API_TOKEN);
   formData.append('subject', subject);
@@ -45,10 +45,15 @@ const sendTicket = (url, formData) => {
 };
 
 const run = () => {
-  sendTicket(createTicketUrl, makeFormData(messages[currMsgId]));
-  currMsgId += 1;
-  if (currMsgId < messages.length) {
-    if (currMsgId % agents.length === 0) {
+  const agentIdx = currMsgIdx % agents.length; 
+  const { group, id } = agents[agentIdx];
+  const ticketIdx = pointers[group];
+  const data = catalogues[group][ticketIdx]; 
+  sendTicket(createTicketUrl, makeFormData(data, id));
+  pointers[group] += 1;
+  currMsgIdx += 1;
+  if (currMsgIdx < maxMessages) {
+    if (currMsgIdx % agents.length === 0) {
       setTimeout(run, 1000 * 60 * minutes);
     } else {
       run();
@@ -57,30 +62,17 @@ const run = () => {
 };
 
 const prepData = (groups) => {
-  const catalogues = groups.map((group) => {
-    const agentsInGroup = agents.filter(a => (a.group === group));
-    const groupArr = JSON.parse(readFileSync(`./mocks/${group}.json`));
-    groupArr.forEach((obj, i) => {
-      const idx = i >= agentsInGroup.length ? i % agentsInGroup.length : i;
-      obj.agent = agentsInGroup[idx].id;
-    });
-    return { group, numOfAgents: agentsInGroup.length, tickets: groupArr };
-  });
-  const data = [];
-  const pointers = groups.reduce((acc, group) => ({...acc, [group]: 0}), {});
-  for (let i = 0; i < ticketsPerAgent; i++) {
-    for (let j = 0; j < catalogues.length; j++) {
-      const { group, tickets, numOfAgents } = catalogues[j];
-      const id = pointers[group];
-      data.push(...tickets.slice(id, id + numOfAgents));
-      pointers[group] += numOfAgents;
-    }
-  }
-  return data;
+  const catalogues = groups.reduce((acc, group) => {
+    const data = JSON.parse(readFileSync(`./mocks/${group}.json`));
+    acc[group] = data;
+    return acc;
+  }, {});
+  return catalogues;
 };
 
 function init() {
-  messages = prepData(groups);
+  catalogues = prepData(groups);
+  maxMessages = Object.keys(catalogues).reduce((acc, cat) => acc += catalogues[cat].length, 0);
   run();
 };
 
