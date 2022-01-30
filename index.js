@@ -10,17 +10,14 @@ const createTicketUrl = process.env.URL;
 // add agent name, id and group to get tickets from. the name of the group should match .json file
 const agents = [
   {
-    name: 'example name',
-    id: 2222,
-    group: 'group_name'
-  },
+    name: 'example agent',
+    id: 1111,
+    group: 'example group'
+  }
 ];
 // set number of minutes to wait
 const minutes = 15; 
-
 const groups = [...new Set(agents.map((agent) => agent.group))];
-const pointers = groups.reduce((acc, group) => ({...acc, [group]: 0}), {});
-let catalogues, maxMessages, currMsgIdx = 0;
 
 const makeFormData = ({ subject, messagePath, files }, agent) => {
   const formData = new FormData();
@@ -44,36 +41,33 @@ const sendTicket = (url, formData) => {
   });
 };
 
-const run = () => {
-  const agentIdx = currMsgIdx % agents.length; 
-  const { group, id } = agents[agentIdx];
-  const ticketIdx = pointers[group];
-  const data = catalogues[group][ticketIdx]; 
-  sendTicket(createTicketUrl, makeFormData(data, id));
-  pointers[group] += 1;
-  currMsgIdx += 1;
-  if (currMsgIdx < maxMessages) {
-    if (currMsgIdx % agents.length === 0) {
-      setTimeout(run, 1000 * 60 * minutes);
-    } else {
-      run();
+const run = (i = 0) => {
+  agents.forEach(({ group, id}) => {
+    const data = catalogues[group][i];
+    
+    if (data) {
+      sendTicket(createTicketUrl, makeFormData(data, id));
     }
+  });
+  
+  if (i + 1 === max) {
+    return;
   }
+
+  setTimeout(() => run(i + 1), 1000 * 60 * minutes);
 };
 
 const prepData = (groups) => {
-  const catalogues = groups.reduce((acc, group) => {
+  return groups.reduce((acc, group) => {
     const data = JSON.parse(readFileSync(`./mocks/${group}.json`));
     acc[group] = data;
     return acc;
   }, {});
-  return catalogues;
 };
 
-function init() {
-  catalogues = prepData(groups);
-  maxMessages = Object.keys(catalogues).reduce((acc, cat) => acc += catalogues[cat].length, 0);
-  run();
-};
+const catalogues = prepData(groups);
+const max = Math.max(...(Object.keys(catalogues).reduce((acc, group) => {
+  return [...acc, catalogues[group].length];
+}, [])));
 
-init();
+run();

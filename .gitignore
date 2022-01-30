@@ -1,4 +1,7 @@
 node_modules/
 mocks/
 mocks-analytics/
+mocks-cpp/
+mocks-python/
 .env
+.DS_Store
