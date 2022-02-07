@@ -1,6 +1,6 @@
 import axios from "axios";
 import dotenv from "dotenv";
-import _ from 'lodash';
+import _ from "lodash";
 import FormData from "form-data";
 import { createReadStream, readFileSync } from "fs";
 
@@ -10,46 +10,51 @@ const createTicketUrl = process.env.URL;
 // add agent name, id and group to get tickets from. the name of the group should match .json file
 const agents = [
   {
-    name: 'example agent',
+    name: "example agent",
     id: 1111,
-    group: 'example group'
-  }
+    group: "example group",
+  },
 ];
+
 // set number of minutes to wait
-const minutes = 15; 
+const minutes = 15;
 const groups = [...new Set(agents.map((agent) => agent.group))];
 
 const makeFormData = ({ subject, messagePath, files }, agent) => {
   const formData = new FormData();
-  formData.append('api_token', process.env.API_TOKEN);
-  formData.append('subject', subject);
-  formData.append('message', readFileSync(messagePath, 'utf-8'));
-  formData.append('client_id', process.env.CLIENT_ID);
-  formData.append('assignee_id', agent);
-  formData.append('channel_id', process.env.CHANNEL_ID);
-  files.forEach(fpath => {
-    formData.append('files[]', createReadStream(fpath));
+  formData.append("api_token", process.env.API_TOKEN);
+  formData.append("subject", subject);
+  formData.append("message", readFileSync(messagePath, "utf-8"));
+  formData.append("client_id", process.env.CLIENT_ID);
+  formData.append("assignee_id", agent);
+  formData.append("channel_id", process.env.CHANNEL_ID);
+  files.forEach((fpath) => {
+    if (fpath) {
+      formData.append("files[]", createReadStream(fpath));
+    }
   });
 
   return formData;
 };
 
 const sendTicket = (url, formData) => {
-  axios.post(url, formData, { headers: formData.getHeaders() })
-  .then(({ data }) => {
-    console.log(data);
-  });
+  axios
+    .post(url, formData, { headers: formData.getHeaders() })
+    .then(({ data }) => {
+      console.log(data);
+    })
+    .catch((err) => {
+      console.log(err.message);
+    });
 };
 
 const run = (i = 0) => {
-  agents.forEach(({ group, id}) => {
+  agents.forEach(({ group, id }) => {
     const data = catalogues[group][i];
-    
     if (data) {
       sendTicket(createTicketUrl, makeFormData(data, id));
     }
   });
-  
   if (i + 1 === max) {
     return;
   }
@@ -59,15 +64,17 @@ const run = (i = 0) => {
 
 const prepData = (groups) => {
   return groups.reduce((acc, group) => {
-    const data = JSON.parse(readFileSync(`./mocks/${group}.json`));
+    const data = _.shuffle(JSON.parse(readFileSync(`./mocks/${group}.json`)));
     acc[group] = data;
     return acc;
   }, {});
 };
 
 const catalogues = prepData(groups);
-const max = Math.max(...(Object.keys(catalogues).reduce((acc, group) => {
-  return [...acc, catalogues[group].length];
-}, [])));
+const max = Math.max(
+  ...Object.keys(catalogues).reduce((acc, group) => {
+    return [...acc, catalogues[group].length];
+  }, [])
+);
 
 run();
